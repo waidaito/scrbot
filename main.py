@@ -69,7 +69,7 @@ def send_chat():
                 try:
                     user = await bot_instance.fetch_user(admin_id)
                     if user: 
-                        await user.send(f"{roblox_name}: {msg}")
+                        await user.send(f"**{roblox_name.upper()}**: {msg}")
                 except Exception as e:
                     print(f"Error sending DM: {e}")
             bot_instance.loop.call_soon_threadsafe(asyncio.create_task, send_dm())
@@ -93,20 +93,20 @@ async def on_ready():
 @bot.tree.command(name="kick", description="Kick a player")
 async def cmd_kick(interaction: discord.Interaction, roblox_name: str, reason: str = "Kicked by admin"):
     if not is_admin(interaction):
-        return await interaction.response.send_message("Access denied!", ephemeral=True)
+        return await interaction.response.send_message("Access denied!")
     
     roblox_commands[roblox_name.lower()] = f"kick:{reason}"
-    await interaction.response.send_message(f"Kicked {roblox_name}", ephemeral=True)
+    await interaction.response.send_message(f"Đã kick {roblox_name}. Lý do: {reason}")
 
 @bot.tree.command(name="kickall", description="Kick all players from the game")
 async def cmd_kick_all(interaction: discord.Interaction, reason: str = "Kicked everyone by admin"):
     global kick_all_active, kick_all_reason
     if not is_admin(interaction):
-        return await interaction.response.send_message("Access denied!", ephemeral=True)
+        return await interaction.response.send_message("Access denied!")
     
     kick_all_active = True
     kick_all_reason = reason
-    await interaction.response.send_message(f"Kicked all players. Reason: {reason}", ephemeral=True)
+    await interaction.response.send_message(f"Đã kick toàn bộ server. Lý do: {reason}")
     
     await asyncio.sleep(10)
     kick_all_active = False
@@ -115,27 +115,27 @@ async def cmd_kick_all(interaction: discord.Interaction, reason: str = "Kicked e
 async def cmd_announcement(interaction: discord.Interaction, message: str):
     global global_announcement
     if not is_admin(interaction):
-        return await interaction.response.send_message("Access denied!", ephemeral=True)
+        return await interaction.response.send_message("Access denied!")
     
     global_announcement = f"big:{message}"
-    await interaction.response.send_message("Announcement sent", ephemeral=True)
+    await interaction.response.send_message(f"Đã gửi thông báo: {message}")
     await asyncio.sleep(10)
     if global_announcement == f"big:{message}": global_announcement = "none"
 
 @bot.tree.command(name="message", description="Private message to player")
 async def cmd_message(interaction: discord.Interaction, roblox_name: str, message: str):
     if not is_admin(interaction):
-        return await interaction.response.send_message("Access denied!", ephemeral=True)
+        return await interaction.response.send_message("Access denied!")
     
     name_lower = roblox_name.lower()
     chat_admins[name_lower] = interaction.user.id
     roblox_messages[name_lower] = f"msg:{message}"
-    await interaction.response.send_message(f"Message sent to {roblox_name}", ephemeral=True)
+    await interaction.response.send_message(f"sent {roblox_name}: {message}")
 
 @bot.tree.command(name="listplayer", description="List all online players running the script")
 async def cmd_list_player(interaction: discord.Interaction):
     if not is_admin(interaction):
-        return await interaction.response.send_message("Access denied!", ephemeral=True)
+        return await interaction.response.send_message("Access denied!")
     
     current_time = time.time()
     online_players = []
@@ -147,10 +147,10 @@ async def cmd_list_player(interaction: discord.Interaction):
             active_players.pop(name_lower, None)
             
     if not online_players:
-        return await interaction.response.send_message("No players online.", ephemeral=True)
+        return await interaction.response.send_message("No one is online.")
         
     player_list_str = "\n".join(f"- {player}" for player in online_players)
-    await interaction.response.send_message(f"Online players:\n{player_list_str}", ephemeral=True)
+    await interaction.response.send_message(f"List of players currently running the script :\n{player_list_str}")
 
 keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))

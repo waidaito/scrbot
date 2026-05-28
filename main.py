@@ -9,12 +9,11 @@ import time
 
 app = Flask('')
 
+# Cố định ID Discord của Admin nhận phản hồi chat
 ADMIN_ID = 1219951796982648913
 
 roblox_commands = {}
 global_announcement = "none"
-roblox_messages = {}
-chat_admins = {}
 kick_all_active = False
 kick_all_reason = ""
 active_players = {}
@@ -38,19 +37,16 @@ def get_command():
     name_lower = roblox_name.lower()
     active_players[name_lower] = {"name": roblox_name, "last_seen": time.time()}
     
+    # Ưu tiên xử lý Kick All trước
     if kick_all_active:
         cmd = f"kick:{kick_all_reason}"
     else:
         cmd = roblox_commands.get(name_lower, "none")
-        if cmd != "none": roblox_commands[name_lower] = "none"
+        if cmd != "none": 
+            roblox_commands[name_lower] = "none"
         
     announcement = "none"
-    specific_msg = roblox_messages.get(name_lower, "none")
-    
-    if specific_msg != "none":
-        announcement = specific_msg
-        roblox_messages[name_lower] = "none"
-    elif global_announcement != "none":
+    if global_announcement != "none":
         announcement = global_announcement
         
     return jsonify({"command": cmd, "announcement": announcement})
@@ -90,6 +86,7 @@ async def on_ready():
     await bot.tree.sync()
     print(f"Admin Bot ready. Restricted to ID: {ADMIN_ID}")
 
+# 1. LỆNH KICK ĐƠN MỤC TIÊU
 @bot.tree.command(name="kick", description="Kick a player")
 async def cmd_kick(interaction: discord.Interaction, roblox_name: str, reason: str = "Kicked by admin"):
     if not is_admin(interaction):
@@ -98,6 +95,7 @@ async def cmd_kick(interaction: discord.Interaction, roblox_name: str, reason: s
     roblox_commands[roblox_name.lower()] = f"kick:{reason}"
     await interaction.response.send_message(f"Kicked {roblox_name}. Reason: {reason}")
 
+# 2. LỆNH KICK TOÀN BỘ SERVER
 @bot.tree.command(name="kickall", description="Kick all players from the game")
 async def cmd_kick_all(interaction: discord.Interaction, reason: str = "Kicked everyone by admin"):
     global kick_all_active, kick_all_reason
@@ -111,6 +109,7 @@ async def cmd_kick_all(interaction: discord.Interaction, reason: str = "Kicked e
     await asyncio.sleep(10)
     kick_all_active = False
 
+# 3. LỆNH THÔNG BÁO CHUNG TOÀN SERVER (Hiển thị 10 giây rồi tự reset)
 @bot.tree.command(name="announcement", description="Global announcement")
 async def cmd_announcement(interaction: discord.Interaction, message: str):
     global global_announcement
@@ -120,18 +119,10 @@ async def cmd_announcement(interaction: discord.Interaction, message: str):
     global_announcement = f"big:{message}"
     await interaction.response.send_message(f"Announcement sent: {message}")
     await asyncio.sleep(10)
-    if global_announcement == f"big:{message}": global_announcement = "none"
+    if global_announcement == f"big:{message}": 
+        global_announcement = "none"
 
-@bot.tree.command(name="message", description="Private message to player")
-async def cmd_message(interaction: discord.Interaction, roblox_name: str, message: str):
-    if not is_admin(interaction):
-        return await interaction.response.send_message("Access denied!")
-    
-    name_lower = roblox_name.lower()
-    chat_admins[name_lower] = interaction.user.id
-    roblox_messages[name_lower] = f"msg:{message}"
-    await interaction.response.send_message(f"Message sent to {roblox_name}: {message}")
-
+# 4. LỆNH KIỂM TRA DANH SÁCH NGƯỜI CHƠI ONLINE KHỚP VỚI HỆ THỐNG
 @bot.tree.command(name="listplayer", description="List all online players running the script")
 async def cmd_list_player(interaction: discord.Interaction):
     if not is_admin(interaction):
@@ -154,3 +145,4 @@ async def cmd_list_player(interaction: discord.Interaction):
 
 keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))
+        

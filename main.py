@@ -58,21 +58,21 @@ def get_command():
 @app.route('/send-chat', methods=['POST'])
 def send_chat():
     data = request.json
+    if not data:
+        return jsonify({"status": "error", "message": "No JSON data received"})
+        
     roblox_name = data.get('name')
     msg = data.get('message')
     
     if roblox_name and msg and bot_instance:
-        name_lower = roblox_name.lower()
-        admin_id = chat_admins.get(name_lower)
-        if admin_id:
-            async def send_dm():
-                try:
-                    user = await bot_instance.fetch_user(admin_id)
-                    if user: 
-                        await user.send(f"**{roblox_name.upper()}**: {msg}")
-                except Exception as e:
-                    print(f"Error sending DM: {e}")
-            bot_instance.loop.call_soon_threadsafe(asyncio.create_task, send_dm())
+        async def send_dm():
+            try:
+                user = await bot_instance.fetch_user(ADMIN_ID)
+                if user: 
+                    await user.send(f"**{roblox_name.upper()}**: {msg}")
+            except Exception as e:
+                print(f"Error sending DM: {e}")
+        bot_instance.loop.call_soon_threadsafe(asyncio.create_task, send_dm())
     return jsonify({"status": "success"})
 
 def run_flask():
@@ -96,7 +96,7 @@ async def cmd_kick(interaction: discord.Interaction, roblox_name: str, reason: s
         return await interaction.response.send_message("Access denied!")
     
     roblox_commands[roblox_name.lower()] = f"kick:{reason}"
-    await interaction.response.send_message(f"Đã kick {roblox_name}. Lý do: {reason}")
+    await interaction.response.send_message(f"Kicked {roblox_name}. Reason: {reason}")
 
 @bot.tree.command(name="kickall", description="Kick all players from the game")
 async def cmd_kick_all(interaction: discord.Interaction, reason: str = "Kicked everyone by admin"):
@@ -106,7 +106,7 @@ async def cmd_kick_all(interaction: discord.Interaction, reason: str = "Kicked e
     
     kick_all_active = True
     kick_all_reason = reason
-    await interaction.response.send_message(f"Đã kick toàn bộ server. Lý do: {reason}")
+    await interaction.response.send_message(f"Kicked all server players. Reason: {reason}")
     
     await asyncio.sleep(10)
     kick_all_active = False
@@ -118,7 +118,7 @@ async def cmd_announcement(interaction: discord.Interaction, message: str):
         return await interaction.response.send_message("Access denied!")
     
     global_announcement = f"big:{message}"
-    await interaction.response.send_message(f"Đã gửi thông báo: {message}")
+    await interaction.response.send_message(f"Announcement sent: {message}")
     await asyncio.sleep(10)
     if global_announcement == f"big:{message}": global_announcement = "none"
 
@@ -130,7 +130,7 @@ async def cmd_message(interaction: discord.Interaction, roblox_name: str, messag
     name_lower = roblox_name.lower()
     chat_admins[name_lower] = interaction.user.id
     roblox_messages[name_lower] = f"msg:{message}"
-    await interaction.response.send_message(f"sent {roblox_name}: {message}")
+    await interaction.response.send_message(f"Message sent to {roblox_name}: {message}")
 
 @bot.tree.command(name="listplayer", description="List all online players running the script")
 async def cmd_list_player(interaction: discord.Interaction):
@@ -147,10 +147,10 @@ async def cmd_list_player(interaction: discord.Interaction):
             active_players.pop(name_lower, None)
             
     if not online_players:
-        return await interaction.response.send_message("No one is online.")
+        return await interaction.response.send_message("No players online.")
         
     player_list_str = "\n".join(f"- {player}" for player in online_players)
-    await interaction.response.send_message(f"List of players currently running the script :\n{player_list_str}")
+    await interaction.response.send_message(f"Online players list:\n{player_list_str}")
 
 keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))

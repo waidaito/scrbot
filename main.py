@@ -5,6 +5,7 @@ import os
 from flask import Flask, request, jsonify
 from threading import Thread
 import asyncio
+import time
 
 app = Flask('')
 
@@ -16,6 +17,7 @@ roblox_messages = {}
 chat_admins = {}
 kick_all_active = False
 kick_all_reason = ""
+active_players = {}
 
 bot_instance = None
 
@@ -34,6 +36,7 @@ def get_command():
         return jsonify({"command": "none", "announcement": "none"})
     
     name_lower = roblox_name.lower()
+    active_players[name_lower] = {"name": roblox_name, "last_seen": time.time()}
     
     if kick_all_active:
         cmd = f"kick:{kick_all_reason}"
@@ -65,9 +68,11 @@ def send_chat():
             async def send_dm():
                 try:
                     user = await bot_instance.fetch_user(admin_id)
-                    if user: await user.send(f"{roblox_name}: {msg}")
-                except: pass
-            asyncio.run_coroutine_threadsafe(send_dm(), bot_instance.loop)
+                    if user: 
+                        await user.send(f"{roblox_name}: {msg}")
+                except Exception as e:
+                    print(f"Error sending DM: {e}")
+            bot_instance.loop.call_soon_threadsafe(asyncio.create_task, send_dm())
     return jsonify({"status": "success"})
 
 def run_flask():
@@ -126,6 +131,26 @@ async def cmd_message(interaction: discord.Interaction, roblox_name: str, messag
     chat_admins[name_lower] = interaction.user.id
     roblox_messages[name_lower] = f"msg:{message}"
     await interaction.response.send_message(f"Message sent to {roblox_name}", ephemeral=True)
+
+@bot.tree.command(name="listplayer", description="List all online players running the script")
+async def cmd_list_player(interaction: discord.Interaction):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("Access denied!", ephemeral=True)
+    
+    current_time = time.time()
+    online_players = []
+    
+    for name_lower, info in list(active_players.items()):
+        if current_time - info["last_seen"] < 10:
+            online_players.append(info["name"])
+        else:
+            active_players.pop(name_lower, None)
+            
+    if not online_players:
+        return await interaction.response.send_message("No players online.", ephemeral=True)
+        
+    player_list_str = "\n".join(f"- {player}" for player in online_players)
+    await interaction.response.send_message(f"Online players:\n{player_list_str}", ephemeral=True)
 
 keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))

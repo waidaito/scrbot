@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 import os
 from flask import Flask, request, jsonify
@@ -7,12 +8,19 @@ import asyncio
 
 app = Flask('')
 
-roblox_commands = {}
-roblox_announcements = {}
+ADMIN_ID = 1219951796982648913
 
-# Lưu trữ ID kênh Discord cuối cùng mà admin dùng để nhắn tin với acc đó
-chat_channels = {}
+roblox_commands = {}
+global_announcement = "none"
+roblox_messages = {}
+chat_admins = {}
+kick_all_active = False
+kick_all_reason = ""
+
 bot_instance = None
+
+def is_admin(interaction: discord.Interaction):
+    return interaction.user.id == ADMIN_ID
 
 @app.route('/')
 def home():
@@ -20,20 +28,30 @@ def home():
 
 @app.route('/get-command', methods=['GET'])
 def get_command():
+    global global_announcement, kick_all_active, kick_all_reason
     roblox_name = request.args.get('name')
     if not roblox_name:
         return jsonify({"command": "none", "announcement": "none"})
     
     name_lower = roblox_name.lower()
-    cmd = roblox_commands.get(name_lower, "none")
-    if cmd != "none": roblox_commands[name_lower] = "none"
+    
+    if kick_all_active:
+        cmd = f"kick:{kick_all_reason}"
+    else:
+        cmd = roblox_commands.get(name_lower, "none")
+        if cmd != "none": roblox_commands[name_lower] = "none"
         
-    announcement = roblox_announcements.get(name_lower, "none")
-    if announcement != "none": roblox_announcements[name_lower] = "none"
+    announcement = "none"
+    specific_msg = roblox_messages.get(name_lower, "none")
+    
+    if specific_msg != "none":
+        announcement = specific_msg
+        roblox_messages[name_lower] = "none"
+    elif global_announcement != "none":
+        announcement = global_announcement
         
     return jsonify({"command": cmd, "announcement": announcement})
 
-# ĐƯỜNG DẪN NHẬN TIN NHẮN TỪ GAME GỬI VỀ DISCORD
 @app.route('/send-chat', methods=['POST'])
 def send_chat():
     data = request.json
@@ -42,15 +60,14 @@ def send_chat():
     
     if roblox_name and msg and bot_instance:
         name_lower = roblox_name.lower()
-        channel_id = chat_channels.get(name_lower)
-        if channel_id:
-            channel = bot_instance.get_channel(channel_id)
-            if channel:
-                # Gửi tin nhắn về Discord theo dạng: name: nội dung
-                asyncio.run_coroutine_threadsafe(
-                    channel.send(f"💬 **{roblox_name}**: {msg}"), 
-                    bot_instance.loop
-                )
+        admin_id = chat_admins.get(name_lower)
+        if admin_id:
+            async def send_dm():
+                try:
+                    user = await bot_instance.fetch_user(admin_id)
+                    if user: await user.send(f"{roblox_name}: {msg}")
+                except: pass
+            asyncio.run_coroutine_threadsafe(send_dm(), bot_instance.loop)
     return jsonify({"status": "success"})
 
 def run_flask():
@@ -60,36 +77,55 @@ def keep_alive():
     Thread(target=run_flask).start()
 
 intents = discord.Intents.default()
-intents.message_content = True
-intents.messages = True
-
-# Hỗ trợ cả dấu ! và dấu . theo ý bro luôn
-bot = commands.Bot(command_prefix=["!", "."], intents=intents)
+bot = commands.Bot(command_prefix="/", intents=intents)
 bot_instance = bot
 
 @bot.event
 async def on_ready():
-    print(f"Messenger Bot {bot.user} đã lên sàn!")
+    await bot.tree.sync()
+    print(f"Admin Bot ready. Restricted to ID: {ADMIN_ID}")
 
-# 1. LỆNH KICK
-@bot.command(name="kick")
-async def cmd_kick(ctx, roblox_name: str, *, reason: str = "Bị admin sút!"):
+@bot.tree.command(name="kick", description="Kick a player")
+async def cmd_kick(interaction: discord.Interaction, roblox_name: str, reason: str = "Kicked by admin"):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("Access denied!", ephemeral=True)
+    
     roblox_commands[roblox_name.lower()] = f"kick:{reason}"
-    await ctx.send(f"🚫 Đã sút `{roblox_name}`!")
+    await interaction.response.send_message(f"Kicked {roblox_name}", ephemeral=True)
 
-# 2. LỆNH THÔNG BÁO TO TOÀN MÀN HÌNH
-@bot.command(name="thongbao")
-async def cmd_thongbao(ctx, roblox_name: str, *, message: str):
-    roblox_announcements[roblox_name.lower()] = f"big:{message}"
-    await ctx.send(f"📢 Đã gửi thông báo lớn đến `{roblox_name}`")
+@bot.tree.command(name="kickall", description="Kick all players from the game")
+async def cmd_kick_all(interaction: discord.Interaction, reason: str = "Kicked everyone by admin"):
+    global kick_all_active, kick_all_reason
+    if not is_admin(interaction):
+        return await interaction.response.send_message("Access denied!", ephemeral=True)
+    
+    kick_all_active = True
+    kick_all_reason = reason
+    await interaction.response.send_message(f"Kicked all players. Reason: {reason}", ephemeral=True)
+    
+    await asyncio.sleep(10)
+    kick_all_active = False
 
-# 3. LỆNH CHAT MESSENGER VỚI NGƯỜI CHƠI (!message hoặc .message)
-@bot.command(name="message")
-async def cmd_message(ctx, roblox_name: str, *, message: str):
+@bot.tree.command(name="announcement", description="Global announcement")
+async def cmd_announcement(interaction: discord.Interaction, message: str):
+    global global_announcement
+    if not is_admin(interaction):
+        return await interaction.response.send_message("Access denied!", ephemeral=True)
+    
+    global_announcement = f"big:{message}"
+    await interaction.response.send_message("Announcement sent", ephemeral=True)
+    await asyncio.sleep(10)
+    if global_announcement == f"big:{message}": global_announcement = "none"
+
+@bot.tree.command(name="message", description="Private message to player")
+async def cmd_message(interaction: discord.Interaction, roblox_name: str, message: str):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("Access denied!", ephemeral=True)
+    
     name_lower = roblox_name.lower()
-    chat_channels[name_lower] = ctx.channel.id # Ghi nhớ kênh này để lát game trả lời về đây
-    roblox_announcements[name_lower] = f"msg:{message}"
-    await ctx.send(f"✉️ **Admin** ➔ `{roblox_name}`: {message}")
+    chat_admins[name_lower] = interaction.user.id
+    roblox_messages[name_lower] = f"msg:{message}"
+    await interaction.response.send_message(f"Message sent to {roblox_name}", ephemeral=True)
 
 keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))

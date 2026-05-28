@@ -8,8 +8,6 @@ import asyncio
 import time
 
 app = Flask('')
-
-# Cố định ID Discord của Admin nhận phản hồi chat
 ADMIN_ID = 1219951796982648913
 
 roblox_commands = {}
